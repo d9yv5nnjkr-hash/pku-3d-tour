@@ -835,6 +835,42 @@ function buildGround(){
   lp.rotation.x=-Math.PI/2;lp.position.set(60,.04,225);lp.receiveShadow=true;scene.add(lp);
   const ap=new THREE.Mesh(new THREE.CircleGeometry(24,40),M.path);
   ap.rotation.x=-Math.PI/2;ap.position.set(95,.04,312);ap.receiveShadow=true;scene.add(ap);
+  buildStreetDetail();
+}
+/* ================= 街景细化：人行道+路缘、中央虚线、路口斑马线 ================= */
+function buildStreetDetail(){
+  const segs=ROADS.map(([x1,z1,x2,z2,w])=>({x1,z1,x2,z2,w,vert:x1===x2}));
+  const gaps=s=>{const out=[];
+    segs.forEach(o=>{if(o===s||o.vert===s.vert)return;
+      if(o.vert&&!s.vert&&o.x1>Math.min(s.x1,s.x2)&&o.x1<Math.max(s.x1,s.x2)&&s.z1>Math.min(o.z1,o.z2)&&s.z1<Math.max(o.z1,o.z2))
+        out.push([o.x1-o.w/2-3.2,o.x1+o.w/2+3.2]);
+      if(!o.vert&&s.vert&&o.z1>Math.min(s.z1,s.z2)&&o.z1<Math.max(s.z1,s.z2)&&s.x1>Math.min(o.x1,o.x2)&&s.x1<Math.max(o.x1,o.x2))
+        out.push([o.z1-o.w/2-3.2,o.z1+o.w/2+3.2]);});
+    return out.sort((a,b)=>a[0]-b[0]);};
+  const spans=s=>{const a=s.vert?Math.min(s.z1,s.z2):Math.min(s.x1,s.x2),b=s.vert?Math.max(s.z1,s.z2):Math.max(s.x1,s.x2);
+    const out=[];let cur=a;gaps(s).forEach(([g0,g1])=>{if(g0>cur)out.push([cur,g0]);cur=Math.max(cur,g1);});
+    if(cur<b)out.push([cur,b]);return out;};
+  const sw=new THREE.Group();
+  segs.forEach(s=>{spans(s).forEach(([a,b])=>{const L=b-a;if(L<5)return;const c=(a+b)/2;
+    [-1,1].forEach(k=>{const off=k*(s.w/2+1.5);
+      if(s.vert)sw.add(box(2.6,.14,L,M.path,s.x1+off,.07,c));
+      else sw.add(box(L,.14,2.6,M.path,c,.07,s.z1+off));});});});
+  mergeStatic(sw);scene.add(sw);
+  const paint=new THREE.MeshStandardMaterial({color:0xd9d2be,roughness:.9});
+  const dash=new THREE.Group();
+  segs.forEach(s=>{spans(s).forEach(([a,b])=>{for(let t=a+4;t<b-4;t+=7){
+    if(s.vert)dash.add(box(.16,.02,2.4,paint,s.x1,.095,t));
+    else dash.add(box(2.4,.02,.16,paint,t,.095,s.z1));}});});
+  mergeStatic(dash);scene.add(dash);
+  const zeb=new THREE.Group();
+  [[-288,120],[150,120],[-60,285],[60,285],[150,340],[-288,460],[288,560],[-60,560]].forEach(([cx,cz])=>{
+    const v=segs.find(s=>s.vert&&s.x1===cx),h=segs.find(s=>!s.vert&&s.z1===cz);
+    if(!v||!h)return;
+    [-1,1].forEach(k=>{const zx=cx+k*(v.w/2+2.6);
+      for(let i=0;i<6;i++)zeb.add(box(.55,.02,h.w-1.4,paint,zx+i*.95-2.4,.095,cz));});
+    [-1,1].forEach(k=>{const zz=cz+k*(h.w/2+2.6);
+      for(let i=0;i<6;i++)zeb.add(box(v.w-1.4,.02,.55,paint,cx,.095,zz+i*.95-2.4));});});
+  mergeStatic(zeb);scene.add(zeb);
 }
 function buildTrack(){
   const g=new THREE.Group();g.position.set(225,0,510);
@@ -1389,6 +1425,17 @@ function buildDorms(){
     g.add(box(49,.5,15,M.stone,0,15.2,0));
     g.add(box(6,3.4,.16,M.dark,0,1.7,7.06));
     g.add(box(8,.3,2.6,M.stone,0,3.6,8.2));
+    /* 宿舍生活细节：阳台+栏杆、空调外机、屋顶楼梯间与水箱 */
+    for(let f=1;f<4;f++)for(let b=0;b<8;b++){const bx=-19.2+b*5.48;
+      g.add(box(3.4,.14,1.3,M.stone,bx,f*3.75+.55,7.6));
+      g.add(box(3.4,.07,.07,M.dark,bx,f*3.75+1.42,8.2));
+      for(let v=0;v<6;v++)g.add(box(.05,.8,.05,M.dark,bx-1.5+v*.6,f*3.75+1.0,8.2));
+      [-1,1].forEach(k=>{g.add(box(.07,.07,1.3,M.dark,bx+k*1.66,f*3.75+1.42,7.6));
+        g.add(box(.05,.8,.05,M.dark,bx+k*1.66,f*3.75+1.0,7.15));
+        g.add(box(.05,.8,.05,M.dark,bx+k*1.66,f*3.75+1.0,8.05));});}
+    for(let f=0;f<4;f++)for(let k=0;k<5;k++)
+      g.add(box(.95,.62,.34,M.marble,-18+k*9+rand(-1,1),f*3.75+3.05,7.25));
+    g.add(box(5,2.1,4,M.brick,-12,16.2,0));g.add(box(2.2,1.3,2.2,M.stone,10,15.9,2));
     signPlane(g,`${30+i+r*6}楼`,3.6,1,0,13.4,7.2,'#fdf6e6','#7c0f18',72);
     mergeStatic(g);scene.add(g);footColliders(x,z,48,14,0);}
   const sg=new THREE.Group();sg.position.set(63,0,610);
@@ -1603,13 +1650,15 @@ function buildTrees(){
     const leafMat=new THREE.MeshLambertMaterial({color:0xffffff,flatShading:true,side:cfg.skirt?THREE.DoubleSide:THREE.FrontSide});
     const trunk=new THREE.InstancedMesh(trunkGeo,M.trunk,recs.length);
     const canopy=new THREE.InstancedMesh(cfg.cone?coneGeo:icoGeo,leafMat,recs.length);
+    const canopy2=new THREE.InstancedMesh(cfg.cone?coneGeo:icoGeo,leafMat,recs.length);
     trunk.castShadow=canopy.castShadow=true;trunk.receiveShadow=canopy.receiveShadow=true;
+    canopy2.castShadow=true;canopy2.frustumCulled=false;
     trunk.frustumCulled=canopy.frustumCulled=false;
     let skirt=null;
     if(cfg.skirt){skirt=new THREE.InstancedMesh(skirtGeo,leafMat,recs.length);
       skirt.castShadow=true;skirt.frustumCulled=false;}
-    TREES[type]={recs,trunk,canopy,skirt,cfg,dummy};
-    scene.add(trunk,canopy);if(skirt)scene.add(skirt);
+    TREES[type]={recs,trunk,canopy,canopy2,skirt,cfg,dummy};
+    scene.add(trunk,canopy,canopy2);if(skirt)scene.add(skirt);
   }
   layoutTrees();
 }
@@ -1629,11 +1678,19 @@ function layoutTrees(){
       col.setHex(SEASON_COLORS[type][S.season]);
       col.offsetHSL(rand(-.015,.015),rand(-.04,.04),rand(-.05,.05));
       T.canopy.setColorAt(i,col);
+      /* 第二层树冠：错位的次级冠球/锥，打破单球玩具感 */
+      const ox=Math.cos(r.rot)*.75*s,oz=Math.sin(r.rot)*.75*s;
+      d.position.set(r.x+ox,cfg.cy*s+(cfg.cone?1.5:.75)*s*shrink-(shrink<1?.5*s:0),r.z+oz);
+      d.scale.set(cfg.cs[0]*cs*.62,cfg.cs[1]*cs*.62,cfg.cs[2]*cs*.62);d.updateMatrix();
+      T.canopy2.setMatrixAt(i,d.matrix);
+      col.offsetHSL(0,0,.05);T.canopy2.setColorAt(i,col);
       if(T.skirt){d.position.set(r.x,2.25*s,r.z);d.scale.set(s*shrink,s*shrink,s*shrink);d.updateMatrix();
         T.skirt.setMatrixAt(i,d.matrix);T.skirt.setColorAt(i,col);}
     });
     T.trunk.instanceMatrix.needsUpdate=true;T.canopy.instanceMatrix.needsUpdate=true;
+    T.canopy2.instanceMatrix.needsUpdate=true;
     if(T.canopy.instanceColor)T.canopy.instanceColor.needsUpdate=true;
+    if(T.canopy2.instanceColor)T.canopy2.instanceColor.needsUpdate=true;
     if(T.skirt){T.skirt.instanceMatrix.needsUpdate=true;if(T.skirt.instanceColor)T.skirt.instanceColor.needsUpdate=true;}
   }
 }
